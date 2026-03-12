@@ -1,0 +1,259 @@
+basePath: /
+definitions:
+  rankmyapp_internal_app_dto.CreateOrderInput:
+    properties:
+      customer_id:
+        example: customer-789
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/rankmyapp_internal_app_dto.CreateOrderItemInput'
+        minItems: 1
+        type: array
+    required:
+    - customer_id
+    - items
+    type: object
+  rankmyapp_internal_app_dto.CreateOrderItemInput:
+    properties:
+      product_id:
+        example: prod-abc-123
+        type: string
+      product_name:
+        example: Wireless Headphones
+        type: string
+      quantity:
+        example: 2
+        minimum: 1
+        type: integer
+      unit_price:
+        example: 149.99
+        type: number
+    required:
+    - product_id
+    - product_name
+    - quantity
+    - unit_price
+    type: object
+  rankmyapp_internal_app_dto.ErrorResponse:
+    properties:
+      code:
+        type: string
+      message:
+        type: string
+    type: object
+  rankmyapp_internal_app_dto.OrderItemResponse:
+    properties:
+      product_id:
+        type: string
+      product_name:
+        type: string
+      quantity:
+        type: integer
+      subtotal:
+        type: number
+      unit_price:
+        type: number
+    type: object
+  rankmyapp_internal_app_dto.OrderResponse:
+    properties:
+      created_at:
+        type: string
+      customer_id:
+        type: string
+      id:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/rankmyapp_internal_app_dto.OrderItemResponse'
+        type: array
+      status:
+        enum:
+        - created
+        - processing
+        - shipped
+        - delivered
+        - cancelled
+        example: processing
+        type: string
+      total_price:
+        type: number
+      updated_at:
+        type: string
+    type: object
+  rankmyapp_internal_app_dto.PaginatedOrdersResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/rankmyapp_internal_app_dto.OrderResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  rankmyapp_internal_app_dto.UpdateOrderStatusInput:
+    properties:
+      status:
+        description: 'Status - Opções: created, processing, shipped, delivered, cancelled'
+        enum:
+        - created
+        - processing
+        - shipped
+        - delivered
+        - cancelled
+        example: processing
+        type: string
+    required:
+    - status
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: E-commerce order management service following Clean Architecture +
+    CQRS + DDD + Outbox Pattern.
+  title: RankMyApp Order API
+  version: "1.0"
+paths:
+  /api/v1/orders:
+    get:
+      parameters:
+      - description: ID do cliente
+        in: query
+        name: customer_id
+        type: string
+      - description: Status do pedido
+        in: query
+        name: status
+        type: string
+      - description: Limite de registros
+        in: query
+        name: limit
+        type: integer
+      - description: Offset de paginação
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/rankmyapp_internal_app_dto.PaginatedOrdersResponse'
+      summary: Lista pedidos com filtros
+      tags:
+      - orders
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Dados do pedido
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/rankmyapp_internal_app_dto.CreateOrderInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/rankmyapp_internal_app_dto.OrderResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/rankmyapp_internal_app_dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/rankmyapp_internal_app_dto.ErrorResponse'
+      summary: Cria um novo pedido
+      tags:
+      - orders
+  /api/v1/orders/{id}:
+    get:
+      parameters:
+      - description: Order ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/rankmyapp_internal_app_dto.OrderResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/rankmyapp_internal_app_dto.ErrorResponse'
+      summary: Consulta pedido por ID
+      tags:
+      - orders
+  /api/v1/orders/{id}/status:
+    patch:
+      consumes:
+      - application/json
+      description: 'Aceita qualquer status do enum: created, processing, shipped,
+        delivered, cancelled (sem restrição de transição).'
+      parameters:
+      - description: Order ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 'Novo status. Opções: created, processing, shipped, delivered,
+          cancelled'
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/rankmyapp_internal_app_dto.UpdateOrderStatusInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/rankmyapp_internal_app_dto.OrderResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/rankmyapp_internal_app_dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/rankmyapp_internal_app_dto.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/rankmyapp_internal_app_dto.ErrorResponse'
+      summary: Atualiza o status do pedido
+      tags:
+      - orders
+  /health:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Healthcheck do serviço
+      tags:
+      - health
+swagger: "2.0"
+tags:
+- description: Order management endpoints
+  name: orders
+- description: Health check
+  name: health
