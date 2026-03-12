@@ -1,0 +1,79 @@
+services:
+  mongodb:
+    image: mongo:7
+    container_name: rankmyapp-mongodb
+    command: ["mongod", "--replSet", "rs0"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  init-mongodb:
+    image: mongo:7
+    container_name: rankmyapp-init-mongodb
+    command: >
+      sh -c "
+        until mongosh mongodb://mongodb:27017 --eval 'db.adminCommand(\"ping\")'; do echo 'Waiting for MongoDB...'; sleep 2; done;
+        mongosh mongodb://mongodb:27017 --eval 'rs.initiate()' || true;
+        echo 'Replica set started.';
+      "
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: rankmyapp-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile.prod
+      target: api
+    container_name: rankmyapp-api
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      MONGO_URI: "mongodb://mongodb:27017/?replicaSet=rs0"
+      MONGO_DATABASE: "rankmyapp"
+      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
+      RABBITMQ_EXCHANGE: "orders.events"
+    depends_on:
+      init-mongodb:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile.prod
+      target: worker
+    container_name: rankmyapp-worker
+    environment:
+      MONGO_URI: "mongodb://mongodb:27017/?replicaSet=rs0"
+      MONGO_DATABASE: "rankmyapp"
+      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
+      RABBITMQ_EXCHANGE: "orders.events"
+    depends_on:
+      init-mongodb:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+
+volumes:
+  mongodb_data:
