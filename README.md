@@ -1,4 +1,4 @@
-# RankMyApp — API de Pedidos
+# API de Pedidos
 
 Serviço de gestão de pedidos (e-commerce) em Go, com **Clean Architecture**, **CQRS**, **DDD** e **Outbox Pattern**. Expõe uma API REST documentada com Swagger e um worker que publica eventos no RabbitMQ.
 
