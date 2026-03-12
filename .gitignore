@@ -1,0 +1,45 @@
+# Environment (keep .env.example in repo)
+.env
+.env.local
+.env.*.local
+
+# Binaries
+/bin/
+*.exe
+api
+worker
+
+# Go
+*.test
+coverage.out
+coverage.html
+/vendor/
+
+# Local caches (when used inside project)
+.gocache/
+.gomodcache/
+.gopath/
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+.docker/
+
+# Logs
+*.log
+logs/
+
+# Build output
+dist/
+build/
+tmp/
+tmp_worker/
