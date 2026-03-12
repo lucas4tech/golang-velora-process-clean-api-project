@@ -20,7 +20,7 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Run golangci-lint
-        run: go run github.com/golangci/golangci-lint/cmd/golangci-lint@latest run --timeout=5m ./cmd/... ./configs/... ./internal/... ./pkg/...
+        run: make lint
 
   unit-tests:
     name: Unit tests
