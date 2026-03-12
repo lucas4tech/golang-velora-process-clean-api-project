@@ -1,0 +1,13 @@
+root = "."
+tmp_dir = "tmp_worker"
+
+[build]
+cmd = "go build -o ./tmp_worker/main ./cmd/worker"
+bin = "./tmp_worker/main"
+include_ext = ["go", "tpl", "tmpl", "html"]
+include_dir = ["cmd", "configs", "internal", "pkg"]
+exclude_dir = ["tmp", "tmp_worker", "vendor", "test", ".git", ".gomodcache", ".gocache", "bin"]
+exclude_file = []
+delay = 800
+stop_on_error = true
+log = "tmp_worker/air.log"
