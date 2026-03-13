@@ -6,8 +6,6 @@
 # Binaries
 /bin/
 *.exe
-api
-worker
 
 # Go
 *.test
