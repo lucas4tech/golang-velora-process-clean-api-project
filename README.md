@@ -9,7 +9,8 @@ Serviço de gestão de pedidos (e-commerce) em Go, com **Clean Architecture**, *
 - **MongoDB** — persistência (com replica set para transações)
 - **RabbitMQ** — mensageria (eventos de pedido)
 - **Swagger (swaggo)** — documentação da API
-- **Zap** — logging
+- **Zap** — logging (JSON com `LOG_FORMAT=json` ou `APP_ENV=production`)
+- **Elastic Stack** — ELK (Logstash em prod com GELF), **APM** (tracing), **Metricbeat** (métricas Docker)
 
 ## Arquitetura
 
@@ -63,20 +64,46 @@ As decisões abaixo explicam **o quê** foi escolhido e **por quê**, para facil
    | `MONGO_DATABASE` | Nome do banco                      | `rankmyapp`                      |
    | `RABBITMQ_URL`   | URL do RabbitMQ                    | `amqp://guest:guest@localhost:5672/` |
    | `RABBITMQ_EXCHANGE` | Exchange de eventos            | `orders.events`                  |
+   | `LOG_FORMAT`       | `json` força logs JSON (útil com ELK); padrão é console colorido em dev | `json` |
+   | `ELASTIC_APM_*`    | Opcional fora do Compose; no Docker já vêm no `docker-compose.*.yml` | ver `.env.example` |
 
 3. Com **Docker** (produção ou dev):
 
-   **Produção** (binários, sem hot reload):
+   **Produção** (binários + mesma stack de observabilidade que o dev):
    ```bash
    make docker-up
    ```
 
-   **Desenvolvimento** (Air + volume, hot reload):
+   **Desenvolvimento** (Air + volume + observabilidade):
    ```bash
    make docker-dev-up
    ```
 
    A API ficará em `http://localhost:8080`. Swagger: `http://localhost:8080/swagger/index.html`.
+
+   Sobe **Elasticsearch**, **Logstash**, **Kibana**, **APM Server** (`:8200`), **Metricbeat**; **Elastic APM** na `api` e no `worker`. Em **dev** e **prod**, logs da app vão por **GELF** → Logstash → índices `rankmyapp-logs-*` (alinhado com **ECS** no pipeline; ver abaixo).
+
+   **`docker compose ... up api worker`** arranca também **Elasticsearch + Logstash** (a `api`/`worker` em dev enviam logs por **GELF** para `127.0.0.1:12201`, como em prod). **Não** esperam pelo APM Server. Para traces APM no Kibana, sobe o stack completo (`make docker-dev-up`) ou o serviço `apm-server`.
+
+   - **Kibana**: http://localhost:5601 — **APM** (traces), **Discover** (logs `rankmyapp-logs-*`), métricas `metricbeat-*`  
+   - **APM (profundidade do trace):** só o **HTTP** vinha do `apmgin`. Spans **MongoDB** (`orders.*`, `outbox_messages.*`) e **RabbitMQ** (`rabbitmq.publish`) são criados em código (`pkg/apmutil` + repositórios + publisher). O agente Go **não** instrumenta `mongo-driver/v2` nem `amqp091-go` automaticamente.  
+   - **Elasticsearch**: http://localhost:9200  
+   - Se o Elasticsearch falhar (Linux/WSL): `sudo sysctl -w vm.max_map_count=262144`.
+   - **Prod** (`make docker-up`): logs da app via **GELF** em `udp://127.0.0.1:12201` (daemon Docker → Logstash; não uses hostname `logstash` no endereço GELF).
+
+   **Logs da app em dev:** a `api` e o `worker` usam **GELF** → Logstash → **`rankmyapp-logs-*`**. No **Kibana → Discover**, data view `rankmyapp-logs-*`, tempo **`@timestamp`**. O Logstash faz parse do JSON do **Zap** e mapeia para **ECS** (padrão de mercado no Elastic): `log.level`, `message`, `http.request.method`, `http.response.status_code`, `url.path`, `source.ip`, `event.duration` (ns), `event.original`, `ecs.version`, `event.dataset`, `service.name` (a partir do tag GELF). Extras Zap em `rankmyapp.*`. Também: **`container.*`**, **`source.geo.*`** (GeoIP), **`event.kind` / `event.category` / `event.type` / `event.outcome`** (SIEM), **`observer.*`**. Reinicia o Logstash após editar `rankmyapp.conf`; índices antigos podem manter formato antigo até à rotação diária.
+
+   `docker compose logs -f api` **não** mostra saída da app (GELF). Recria os containers após mudanças no Air (`docker compose ... up --build` ou `make docker-dev-up`).
+
+   **Kibana: “Name must match…” para `rankmyapp-logs-*`:** esse padrão **só existe depois do primeiro documento** chegar ao Elasticsearch via Logstash. Se só vês `metricbeat-*` e `traces-apm-*`, os **logs da app ainda não estão a ser indexados**. Faz: `curl -s http://localhost:8080/health` (várias vezes), `make docker-dev-check-elk` e `docker compose -f deployments/docker-compose.dev.yml logs logstash --tail 100` (procura `ERROR` / pipeline failed). **Docker Desktop (Windows/Mac):** cria na **raiz do repo** um ficheiro `.env` com `RANKMYAPP_GELF_ADDR=udp://host.docker.internal:12201` (copia de `deployments/.env.example`) e recria `api`/`worker` (`up -d --build api worker`). O `docker-compose.dev.yml` usa essa variável em `gelf-address`. Enquanto não há índices de log, podes usar data views que já existem: **`metricbeat-*`**, **`traces-apm-*`**.
+
+   **Produção / mercado:** ativa **segurança** no Elastic (TLS + utilizadores) em ambientes expostos; o aviso *“Your data is not secure”* no Kibana desaparece ao configurar autenticação. Usa **ILM** e **retention** nos índices `rankmyapp-logs-*` quando tiveres volume real.
+
+   **Testar ingestão de logs no Elasticsearch** (`rankmyapp-logs-*`): com stack **prod** (`make docker-up`) e GELF ativo, ou manualmente; em **dev** o `make test-elk` já não encontra índices da app só com tráfego HTTP.
+
+   ```bash
+   make test-elk
+   ```
 
 4. **Sem Docker** (só API e worker locais): tenha MongoDB (replica set) e RabbitMQ rodando e use:
 
@@ -91,7 +118,7 @@ Execute `make` na **raiz do projeto**.
 
 | Comando              | Descrição |
 |----------------------|-----------|
-| `make help`          | Lista todos os alvos |
+| `make` ou `make help` | Ajuda (alvos do Makefile, em português) |
 | `make build`         | Gera binários em `./bin/` (api e worker) |
 | `make run-api`       | Sobe a API (`go run ./cmd/api`) |
 | `make run-worker`    | Sobe o worker (`go run ./cmd/worker`) |
@@ -108,14 +135,15 @@ Execute `make` na **raiz do projeto**.
 | `make tidy`          | `go mod tidy` |
 | `make clean`         | Remove `bin/` e arquivos de cobertura |
 | `make docker-build`  | Build das imagens de **produção** (API e Worker) |
-| `make docker-up`     | Sobe os containers de **produção** |
-| `make docker-down`   | Para os containers |
+| `make docker-up`     | Prod: app + **ELK + APM + Metricbeat** |
+| `make docker-down`   | Para todos os containers |
 | `make docker-reup`   | Rebuild + docker-up (prod) |
-| `make docker-dev-build` | Build das imagens de **dev** (Go + Air) |
-| `make docker-dev-up` | Sobe o stack de **dev** com hot reload (Air) |
-| `make docker-dev-down` | Para o stack de dev |
+| `make docker-dev-up` | Stack **dev** com Air, `--build`; logs da app via GELF → Kibana; ELK + APM + Metricbeat |
+| `make docker-dev-down` | Para o stack dev |
+| `make docker-dev-check-elk` | Lista índices `rankmyapp*` no Elasticsearch (diagnóstico do data view) |
+| `make test-elk`      | Testa ingestão de logs no Elasticsearch (API em execução) |
 
-> **Nota:** **Prod:** `docker-compose.prod.yml` + `Dockerfile.prod` (binários). **Dev:** `docker-compose.dev.yml` + `Dockerfile.dev` (Air + volume). Execute `make docker-up` ou `make docker-dev-up` na raiz do projeto.
+> **Nota:** **Prod** e **dev** usam a mesma stack de observabilidade declarada nos composes (`deployments/docker-compose.prod.yml` e `deployments/docker-compose.dev.yml`).
 
 ## API — Endpoints
 
@@ -137,8 +165,9 @@ Execute `make` na **raiz do projeto**.
 │   ├── api/          # Entrada da API HTTP
 │   └── worker/       # Entrada do worker outbox
 ├── configs/          # Carregamento de configuração
-├── deployments/      # Docker: prod (docker-compose.prod.yml, Dockerfile.prod) e dev (docker-compose.dev.yml, Dockerfile.dev)
-├── docs/             # Swagger gerado (make swag)
+├── deployments/      # Docker Compose prod/dev + configs ELK (elk/)
+├── docs/             # Swagger gerado (`make swag`)
+├── scripts/          # test-elk.sh (smoke test de logs)
 ├── internal/
 │   ├── app/          # Commands, queries, DTOs, use cases
 │   ├── domain/       # Entidades, eventos, repositórios (interfaces), value objects

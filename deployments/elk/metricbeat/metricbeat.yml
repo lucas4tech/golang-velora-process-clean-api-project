@@ -1,0 +1,16 @@
+metricbeat.config.modules:
+  path: ${path.config}/modules.d/*.yml
+  reload.enabled: false
+
+processors:
+  - add_host_metadata: ~
+
+output.elasticsearch:
+  hosts: ["http://elasticsearch:9200"]
+  allow_older_versions: true
+
+setup.dashboards.enabled: false
+setup.ilm.enabled: true
+
+logging.level: info
+logging.to_stderr: true

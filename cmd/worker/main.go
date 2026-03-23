@@ -8,6 +8,7 @@ import (
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"go.elastic.co/apm/v2"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	mongoopts "go.mongodb.org/mongo-driver/v2/mongo/options"
 	"go.uber.org/zap"
@@ -57,5 +58,6 @@ func main() {
 	log.Info("worker: signal received, shutting down...")
 	cancel()
 	time.Sleep(2 * time.Second)
+	apm.DefaultTracer().Flush(nil)
 	log.Info("worker: stopped")
 }

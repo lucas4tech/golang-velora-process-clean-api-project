@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
+	"go.elastic.co/apm/module/apmgin/v2"
 
 	"rankmyapp/internal/infra/http/handler"
 	"rankmyapp/internal/infra/http/middleware"
@@ -12,12 +13,14 @@ import (
 func Setup(orderHandler *handler.OrderHandler) *gin.Engine {
 	r := gin.New()
 
+	r.Use(apmgin.Middleware(r))
+
 	r.Use(middleware.RequestLogger())
 	r.Use(gin.Recovery())
 	r.Use(middleware.ErrorHandler())
 
 	r.GET("/health", handler.HealthCheck)
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, ginSwagger.URL("/swagger/doc.json")))
 
 	v1 := r.Group("/api/v1")
 	{

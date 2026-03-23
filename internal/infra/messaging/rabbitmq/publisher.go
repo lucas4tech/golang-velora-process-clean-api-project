@@ -7,6 +7,7 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap"
 
+	"rankmyapp/pkg/apmutil"
 	"rankmyapp/pkg/logger"
 )
 
@@ -37,10 +38,13 @@ func NewPublisher(conn *amqp.Connection, exchange string) (*Publisher, error) {
 	return &Publisher{conn: conn, channel: ch, exchange: exchange}, nil
 }
 
-func (p *Publisher) Publish(ctx context.Context, eventName string, payload []byte) error {
+func (p *Publisher) Publish(ctx context.Context, eventName string, payload []byte) (err error) {
 	log := logger.Get()
 
-	err := p.channel.PublishWithContext(ctx,
+	span, sctx := apmutil.MessagingPublishSpan(ctx, eventName)
+	defer func() { apmutil.EndSpan(span, err) }()
+
+	err = p.channel.PublishWithContext(sctx,
 		p.exchange,
 		eventName,
 		false,

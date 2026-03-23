@@ -38,11 +38,113 @@ services:
       timeout: 5s
       retries: 5
 
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.5
+    container_name: rankmyapp-elasticsearch
+    environment:
+      - node.name=rankmyapp-es
+      - cluster.name=rankmyapp
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=false
+      - xpack.security.enrollment.enabled=false
+      - xpack.security.http.ssl.enabled=false
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200 >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.15.5
+    container_name: rankmyapp-logstash
+    environment:
+      - LS_JAVA_OPTS=-Xms256m -Xmx256m
+    ports:
+      - "12201:12201/udp"
+      - "5044:5044"
+      - "9600:9600"
+    volumes:
+      - ./elk/logstash/pipeline:/usr/share/logstash/pipeline:ro
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9600 >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.15.5
+    container_name: rankmyapp-kibana
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+      ELASTICSEARCH_SSL_VERIFICATIONMODE: none
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      logstash:
+        condition: service_healthy
+
+  apm-server:
+    image: docker.elastic.co/apm/apm-server:8.15.5
+    container_name: rankmyapp-apm-server
+    ports:
+      - "8200:8200"
+    volumes:
+      - ./elk/apm-server/apm-server.yml:/usr/share/apm-server/apm-server.yml:ro
+    command:
+      [
+        "apm-server",
+        "run",
+        "--strict.perms=false",
+        "-e",
+        "-c",
+        "/usr/share/apm-server/apm-server.yml",
+      ]
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8200/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 25
+      start_period: 45s
+
+  metricbeat:
+    image: docker.elastic.co/beats/metricbeat:8.15.5
+    container_name: rankmyapp-metricbeat
+    user: root
+    volumes:
+      - ./elk/metricbeat/metricbeat.yml:/usr/share/metricbeat/metricbeat.yml:ro
+      - ./elk/metricbeat/modules.d/docker.yml:/usr/share/metricbeat/modules.d/docker.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: ["metricbeat", "-e", "-strict.perms=false", "-c", "/usr/share/metricbeat/metricbeat.yml"]
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
   api:
     build:
       context: ..
       dockerfile: deployments/Dockerfile.dev
     container_name: rankmyapp-api
+
     ports:
       - "8080:8080"
     environment:
@@ -51,6 +153,11 @@ services:
       MONGO_DATABASE: "rankmyapp"
       RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
       RABBITMQ_EXCHANGE: "orders.events"
+      LOG_FORMAT: json
+      ELASTIC_APM_SERVER_URL: "http://apm-server:8200"
+      ELASTIC_APM_SERVICE_NAME: "rankmyapp-api"
+      ELASTIC_APM_ENVIRONMENT: "development"
+      ELASTIC_APM_VERIFY_SERVER_CERT: "false"
     volumes:
       - ..:/app
     working_dir: /app
@@ -60,6 +167,14 @@ services:
         condition: service_completed_successfully
       rabbitmq:
         condition: service_healthy
+      logstash:
+        condition: service_healthy
+    logging:
+      driver: gelf
+      options:
+        gelf-address: "${RANKMYAPP_GELF_ADDR:-udp://127.0.0.1:12201}"
+        tag: "rankmyapp-api"
+        labels: "service,com.docker.compose.service"
 
   worker:
     build:
@@ -71,6 +186,11 @@ services:
       MONGO_DATABASE: "rankmyapp"
       RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
       RABBITMQ_EXCHANGE: "orders.events"
+      LOG_FORMAT: json
+      ELASTIC_APM_SERVER_URL: "http://apm-server:8200"
+      ELASTIC_APM_SERVICE_NAME: "rankmyapp-worker"
+      ELASTIC_APM_ENVIRONMENT: "development"
+      ELASTIC_APM_VERIFY_SERVER_CERT: "false"
     volumes:
       - ..:/app
     working_dir: /app
@@ -80,6 +200,15 @@ services:
         condition: service_completed_successfully
       rabbitmq:
         condition: service_healthy
+      logstash:
+        condition: service_healthy
+    logging:
+      driver: gelf
+      options:
+        gelf-address: "${RANKMYAPP_GELF_ADDR:-udp://127.0.0.1:12201}"
+        tag: "rankmyapp-worker"
+        labels: "service,com.docker.compose.service"
 
 volumes:
   mongodb_data:
+  elasticsearch_data:

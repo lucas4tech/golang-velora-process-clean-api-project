@@ -10,4 +10,4 @@ exclude_dir = ["tmp", "vendor", "test", ".git", ".gomodcache", ".gocache", "bin"
 exclude_file = []
 delay = 800
 stop_on_error = true
-log = "tmp/air.log"
+# Sem `log` em ficheiro: saída vai para stdout/stderr → visível em `docker compose logs -f api`.

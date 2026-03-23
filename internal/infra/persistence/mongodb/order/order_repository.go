@@ -12,6 +12,7 @@ import (
 	"rankmyapp/internal/domain/order/entity"
 	orderrepo "rankmyapp/internal/domain/order/repository"
 	"rankmyapp/internal/domain/order/valueobject"
+	"rankmyapp/pkg/apmutil"
 	apperrors "rankmyapp/pkg/errors"
 )
 
@@ -50,18 +51,30 @@ func (r *MongoOrderRepository) coll() *mongo.Collection {
 	return r.db.Collection(orderCollection)
 }
 
-func (r *MongoOrderRepository) Save(ctx context.Context, order *entity.Order) error {
+func (r *MongoOrderRepository) Save(ctx context.Context, order *entity.Order) (err error) {
+	span, sctx := apmutil.MongoSpan(ctx, "insertOne", orderCollection)
+	defer apmutil.EndSpan(span, err)
+
 	doc := toDocument(order)
-	_, err := r.coll().InsertOne(ctx, doc)
+	_, err = r.coll().InsertOne(sctx, doc)
 	if err != nil {
 		return apperrors.Wrap(apperrors.ErrInternal.Code, "error saving order", 500, err)
 	}
 	return nil
 }
 
-func (r *MongoOrderRepository) FindByID(ctx context.Context, id string) (*entity.Order, error) {
+func (r *MongoOrderRepository) FindByID(ctx context.Context, id string) (_ *entity.Order, err error) {
+	span, sctx := apmutil.MongoSpan(ctx, "findOne", orderCollection)
+	defer func() {
+		if err != nil && errors.Is(err, apperrors.ErrOrderNotFound) {
+			apmutil.EndSpan(span, nil)
+			return
+		}
+		apmutil.EndSpan(span, err)
+	}()
+
 	var doc orderDocument
-	err := r.coll().FindOne(ctx, bson.M{"_id": id}).Decode(&doc)
+	err = r.coll().FindOne(sctx, bson.M{"_id": id}).Decode(&doc)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, apperrors.ErrOrderNotFound
@@ -72,14 +85,17 @@ func (r *MongoOrderRepository) FindByID(ctx context.Context, id string) (*entity
 }
 
 func (r *MongoOrderRepository) FindAll(ctx context.Context, filter orderrepo.OrderFilter) ([]*entity.Order, error) {
-	return findAll(ctx, r.coll(), filter)
+	return findAll(ctx, r.coll(), filter, orderCollection)
 }
 
 func (r *MongoOrderRepository) Update(ctx context.Context, order *entity.Order) error {
-	return updateOrder(ctx, r.coll(), order)
+	return updateOrder(ctx, r.coll(), order, orderCollection)
 }
 
-func findAll(ctx context.Context, coll *mongo.Collection, filter orderrepo.OrderFilter) ([]*entity.Order, error) {
+func findAll(ctx context.Context, coll *mongo.Collection, filter orderrepo.OrderFilter, collectionName string) (orders []*entity.Order, err error) {
+	span, sctx := apmutil.MongoSpan(ctx, "find", collectionName)
+	defer func() { apmutil.EndSpan(span, err) }()
+
 	q := bson.M{}
 	if filter.CustomerID != "" {
 		q["customer_id"] = filter.CustomerID
@@ -97,35 +113,44 @@ func findAll(ctx context.Context, coll *mongo.Collection, filter orderrepo.Order
 	}
 	opts.SetSort(bson.D{{Key: "created_at", Value: -1}})
 
-	cursor, err := coll.Find(ctx, q, opts)
+	cursor, err := coll.Find(sctx, q, opts)
 	if err != nil {
 		return nil, apperrors.Wrap(apperrors.ErrInternal.Code, "error listing orders", 500, err)
 	}
-	defer cursor.Close(ctx)
+	defer cursor.Close(sctx)
 
 	var docs []orderDocument
-	if err = cursor.All(ctx, &docs); err != nil {
+	if err = cursor.All(sctx, &docs); err != nil {
 		return nil, apperrors.Wrap(apperrors.ErrInternal.Code, "error decoding orders", 500, err)
 	}
 
-	orders := make([]*entity.Order, 0, len(docs))
+	orders = make([]*entity.Order, 0, len(docs))
 	for _, d := range docs {
-		o, err := fromDocument(d)
-		if err != nil {
-			return nil, err
+		o, ferr := fromDocument(d)
+		if ferr != nil {
+			return nil, ferr
 		}
 		orders = append(orders, o)
 	}
 	return orders, nil
 }
 
-func updateOrder(ctx context.Context, coll *mongo.Collection, order *entity.Order) error {
+func updateOrder(ctx context.Context, coll *mongo.Collection, order *entity.Order, collectionName string) (err error) {
+	span, sctx := apmutil.MongoSpan(ctx, "updateOne", collectionName)
+	defer func() {
+		if err != nil && errors.Is(err, apperrors.ErrOrderNotFound) {
+			apmutil.EndSpan(span, nil)
+			return
+		}
+		apmutil.EndSpan(span, err)
+	}()
+
 	filter := bson.M{"_id": order.ID()}
 	update := bson.M{"$set": bson.M{
 		"status":     order.Status().String(),
 		"updated_at": order.UpdatedAt(),
 	}}
-	res, err := coll.UpdateOne(ctx, filter, update)
+	res, err := coll.UpdateOne(sctx, filter, update)
 	if err != nil {
 		return apperrors.Wrap(apperrors.ErrInternal.Code, "error updating order", 500, err)
 	}

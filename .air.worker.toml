@@ -10,4 +10,4 @@ exclude_dir = ["tmp", "tmp_worker", "vendor", "test", ".git", ".gomodcache", ".g
 exclude_file = []
 delay = 800
 stop_on_error = true
-log = "tmp_worker/air.log"
+# Sem `log` em ficheiro → `docker compose logs -f worker`.

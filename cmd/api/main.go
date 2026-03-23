@@ -20,6 +20,7 @@ import (
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"go.elastic.co/apm/v2"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	mongoopts "go.mongodb.org/mongo-driver/v2/mongo/options"
 	"go.uber.org/zap"
@@ -106,5 +107,6 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Error("api: forced shutdown", zap.Error(err))
 	}
+	apm.DefaultTracer().Flush(nil)
 	log.Info("api: server stopped")
 }

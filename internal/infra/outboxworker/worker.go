@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"go.elastic.co/apm/v2"
 	"go.uber.org/zap"
 
 	outboxrepo "rankmyapp/internal/domain/outbox/repository"
@@ -55,6 +56,10 @@ func (w *Worker) Start(ctx context.Context) {
 }
 
 func (w *Worker) ProcessOnce(ctx context.Context) {
+	tx := apm.DefaultTracer().StartTransaction("outbox.process", "background")
+	defer tx.End()
+	ctx = apm.ContextWithTransaction(ctx, tx)
+
 	log := logger.Get()
 
 	msgs, err := w.repo.FindPending(ctx, w.batchSize)

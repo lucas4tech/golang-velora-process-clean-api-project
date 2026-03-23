@@ -21,8 +21,10 @@ func Get() *zap.Logger {
 			return
 		}
 		var cfg zap.Config
-		if os.Getenv("APP_ENV") == "production" {
+		if useJSONLogs() {
 			cfg = zap.NewProductionConfig()
+			cfg.OutputPaths = []string{"stdout"}
+			cfg.ErrorOutputPaths = []string{"stdout"}
 		} else {
 			cfg = zap.NewDevelopmentConfig()
 			cfg.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
@@ -34,6 +36,13 @@ func Get() *zap.Logger {
 		}
 	})
 	return instance
+}
+
+func useJSONLogs() bool {
+	if os.Getenv("APP_ENV") == "production" {
+		return true
+	}
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("LOG_FORMAT")), "json")
 }
 
 func testingMode() bool {

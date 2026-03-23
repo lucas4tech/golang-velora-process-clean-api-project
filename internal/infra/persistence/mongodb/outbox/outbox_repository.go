@@ -10,6 +10,7 @@ import (
 
 	outboxentity "rankmyapp/internal/domain/outbox/entity"
 	outboxrepo "rankmyapp/internal/domain/outbox/repository"
+	"rankmyapp/pkg/apmutil"
 	apperrors "rankmyapp/pkg/errors"
 )
 
@@ -42,8 +43,11 @@ func (r *MongoOutboxRepository) coll() *mongo.Collection {
 	return r.db.Collection(outboxCollection)
 }
 
-func (r *MongoOutboxRepository) Save(ctx context.Context, msg *outboxentity.OutboxMessage) error {
-	_, err := r.coll().InsertOne(ctx, toOutboxDocument(msg))
+func (r *MongoOutboxRepository) Save(ctx context.Context, msg *outboxentity.OutboxMessage) (err error) {
+	span, sctx := apmutil.MongoSpan(ctx, "insertOne", outboxCollection)
+	defer apmutil.EndSpan(span, err)
+
+	_, err = r.coll().InsertOne(sctx, toOutboxDocument(msg))
 	if err != nil {
 		return apperrors.Wrap(apperrors.ErrInternal.Code, "error saving outbox", 500, err)
 	}
@@ -51,43 +55,49 @@ func (r *MongoOutboxRepository) Save(ctx context.Context, msg *outboxentity.Outb
 }
 
 func (r *MongoOutboxRepository) FindPending(ctx context.Context, limit int) ([]*outboxentity.OutboxMessage, error) {
-	return findPendingOutbox(ctx, r.coll(), limit)
+	return findPendingOutbox(ctx, r.coll(), limit, outboxCollection)
 }
 
 func (r *MongoOutboxRepository) UpdateStatus(ctx context.Context, msg *outboxentity.OutboxMessage) error {
-	return updateOutboxStatus(ctx, r.coll(), msg)
+	return updateOutboxStatus(ctx, r.coll(), msg, outboxCollection)
 }
 
-func findPendingOutbox(ctx context.Context, coll *mongo.Collection, limit int) ([]*outboxentity.OutboxMessage, error) {
+func findPendingOutbox(ctx context.Context, coll *mongo.Collection, limit int, collectionName string) (msgs []*outboxentity.OutboxMessage, err error) {
+	span, sctx := apmutil.MongoSpan(ctx, "find", collectionName)
+	defer func() { apmutil.EndSpan(span, err) }()
+
 	filter := bson.M{"status": string(outboxentity.OutboxStatusPending)}
 	opts := options.Find().SetLimit(int64(limit)).SetSort(bson.D{{Key: "created_at", Value: 1}})
 
-	cursor, err := coll.Find(ctx, filter, opts)
+	cursor, err := coll.Find(sctx, filter, opts)
 	if err != nil {
 		return nil, apperrors.Wrap(apperrors.ErrInternal.Code, "error fetching outbox", 500, err)
 	}
-	defer cursor.Close(ctx)
+	defer cursor.Close(sctx)
 
 	var docs []outboxDocument
-	if err = cursor.All(ctx, &docs); err != nil {
+	if err = cursor.All(sctx, &docs); err != nil {
 		return nil, apperrors.Wrap(apperrors.ErrInternal.Code, "error decoding outbox", 500, err)
 	}
 
-	msgs := make([]*outboxentity.OutboxMessage, len(docs))
+	msgs = make([]*outboxentity.OutboxMessage, len(docs))
 	for i, d := range docs {
 		msgs[i] = fromOutboxDocument(d)
 	}
 	return msgs, nil
 }
 
-func updateOutboxStatus(ctx context.Context, coll *mongo.Collection, msg *outboxentity.OutboxMessage) error {
+func updateOutboxStatus(ctx context.Context, coll *mongo.Collection, msg *outboxentity.OutboxMessage, collectionName string) (err error) {
+	span, sctx := apmutil.MongoSpan(ctx, "updateOne", collectionName)
+	defer apmutil.EndSpan(span, err)
+
 	filter := bson.M{"_id": msg.ID}
 	update := bson.M{"$set": bson.M{
 		"status":     string(msg.Status),
 		"attempts":   msg.Attempts,
 		"updated_at": msg.UpdatedAt,
 	}}
-	_, err := coll.UpdateOne(ctx, filter, update)
+	_, err = coll.UpdateOne(sctx, filter, update)
 	if err != nil {
 		return apperrors.Wrap(apperrors.ErrInternal.Code, "error updating outbox", 500, err)
 	}
