@@ -82,13 +82,16 @@ Serviço de gestão de pedidos (e-commerce) em Go, com **Clean Architecture**, *
 
 3. **Docker** — ficheiros em `deployments/`:
 
-   | Ambiente | Comando | Compose |
-   |----------|---------|---------|
-   | Produção | `make docker-up` | `deployments/docker-compose.prod.yml` |
-   | Desenvolvimento (Air + ELK) | `make docker-dev-up` | `deployments/docker-compose.dev.yml` |
+   | Ambiente | Comando | Compose | Variáveis da app (`env_file` na raiz) |
+   |----------|---------|---------|----------------------------------------|
+   | Produção | `make docker-up` | `docker-compose.prod.yml` | `.env.production` |
+   | Desenvolvimento (Air + ELK) | `make docker-dev-up` | `docker-compose.dev.yml` | `.env.development` |
+   | Teste (sem ELK, portas alternativas) | `make docker-test-up` | `docker-compose.test.yml` | `.env.test` |
 
-   - API: **http://localhost:8080** — Swagger: **http://localhost:8080/swagger/index.html**
-   - **`docker compose ... up api worker`** (dev) arranca também Elasticsearch e Logstash (dependência dos logs GELF). Não bloqueia no healthcheck do APM Server.
+   Os serviços **`api`** e **`worker`** carregam o ficheiro na **raiz do repositório**; só **`ELASTIC_APM_SERVICE_NAME`** fica no Compose (diferente por serviço). Modelos: **`.env.*.example`**.
+
+   - API dev/prod: **http://localhost:8080** — API stack teste: **http://localhost:8081**
+   - **`docker compose ... up api worker`** (dev) arranca também Elasticsearch e Logstash (GELF). Não bloqueia no APM Server.
 
 4. **Sem Docker** (MongoDB + RabbitMQ locais):
 
@@ -125,7 +128,7 @@ Se o Elasticsearch falhar no Linux/WSL: `sudo sysctl -w vm.max_map_count=262144`
 RANKMYAPP_GELF_ADDR=udp://host.docker.internal:12201
 ```
 
-(modelo em `deployments/.env.example`). Recria `api` e `worker`. Em Linux nativo o default `udp://127.0.0.1:12201` costuma bastar.
+(Referência: `.env.example` na raiz.) O `Makefile` passa `--env-file .env` quando esse ficheiro existe, para o Compose interpolar `RANKMYAPP_GELF_ADDR`. Sem `make`, o Compose usa por defeito `deployments/.env` para essas variáveis. Recria `api` e `worker`. Em Linux nativo o default `udp://127.0.0.1:12201` costuma bastar.
 
 **Diagnóstico:** `make docker-dev-check-elk` lista índices `rankmyapp*`; `docker compose -f deployments/docker-compose.dev.yml logs logstash --tail 100` para erros de pipeline.
 
@@ -168,6 +171,7 @@ Executa `make` na **raiz do projeto**. Compose: `-f deployments/docker-compose.{
 | `make tidy` / `make clean` | `go mod tidy` / artefactos locais |
 | `make docker-build` / `make docker-up` / `make docker-down` / `make docker-reup` | **Produção** |
 | `make docker-dev-up` / `make docker-dev-down` | **Dev** (Air + ELK + APM + Metricbeat) |
+| `make docker-test-up` / `make docker-test-down` | **Test** (Mongo + RabbitMQ + app prod; `.env.test` na raiz; API `:8081`) |
 | `make docker-dev-check-elk` | Lista índices `rankmyapp*` no Elasticsearch |
 | `make docker-dev-logs-api` / `make docker-dev-logs-worker` | `compose logs -f` (com GELF, a app pode não aparecer aqui) |
 | `make test-elk` | Smoke test de ingestão de logs |
@@ -194,7 +198,7 @@ Executa `make` na **raiz do projeto**. Compose: `-f deployments/docker-compose.{
 ├── cmd/api/                 # API HTTP
 ├── cmd/worker/              # Worker outbox
 ├── configs/
-├── deployments/             # docker-compose.prod.yml, docker-compose.dev.yml, Dockerfiles, elk/
+├── deployments/             # compose prod/dev/test, Dockerfiles, elk/
 ├── docs/                    # Swagger (`make swag`)
 ├── scripts/                 # test-elk.sh
 ├── internal/

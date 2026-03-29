@@ -144,20 +144,12 @@ services:
       context: ..
       dockerfile: deployments/Dockerfile.dev
     container_name: rankmyapp-api
-
+    env_file:
+      - ../.env.development
+    environment:
+      ELASTIC_APM_SERVICE_NAME: rankmyapp-api
     ports:
       - "8080:8080"
-    environment:
-      PORT: "8080"
-      MONGO_URI: "mongodb://mongodb:27017/?replicaSet=rs0"
-      MONGO_DATABASE: "rankmyapp"
-      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
-      RABBITMQ_EXCHANGE: "orders.events"
-      LOG_FORMAT: json
-      ELASTIC_APM_SERVER_URL: "http://apm-server:8200"
-      ELASTIC_APM_SERVICE_NAME: "rankmyapp-api"
-      ELASTIC_APM_ENVIRONMENT: "development"
-      ELASTIC_APM_VERIFY_SERVER_CERT: "false"
     volumes:
       - ..:/app
     working_dir: /app
@@ -181,16 +173,10 @@ services:
       context: ..
       dockerfile: deployments/Dockerfile.dev
     container_name: rankmyapp-worker
+    env_file:
+      - ../.env.development
     environment:
-      MONGO_URI: "mongodb://mongodb:27017/?replicaSet=rs0"
-      MONGO_DATABASE: "rankmyapp"
-      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
-      RABBITMQ_EXCHANGE: "orders.events"
-      LOG_FORMAT: json
-      ELASTIC_APM_SERVER_URL: "http://apm-server:8200"
-      ELASTIC_APM_SERVICE_NAME: "rankmyapp-worker"
-      ELASTIC_APM_ENVIRONMENT: "development"
-      ELASTIC_APM_VERIFY_SERVER_CERT: "false"
+      ELASTIC_APM_SERVICE_NAME: rankmyapp-worker
     volumes:
       - ..:/app
     working_dir: /app

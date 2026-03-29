@@ -145,19 +145,12 @@ services:
       dockerfile: deployments/Dockerfile.prod
       target: api
     container_name: rankmyapp-api
+    env_file:
+      - ../.env.production
+    environment:
+      ELASTIC_APM_SERVICE_NAME: rankmyapp-api
     ports:
       - "8080:8080"
-    environment:
-      PORT: "8080"
-      MONGO_URI: "mongodb://mongodb:27017/?replicaSet=rs0"
-      MONGO_DATABASE: "rankmyapp"
-      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
-      RABBITMQ_EXCHANGE: "orders.events"
-      LOG_FORMAT: json
-      ELASTIC_APM_SERVER_URL: "http://apm-server:8200"
-      ELASTIC_APM_SERVICE_NAME: "rankmyapp-api"
-      ELASTIC_APM_ENVIRONMENT: "production"
-      ELASTIC_APM_VERIFY_SERVER_CERT: "false"
     depends_on:
       init-mongodb:
         condition: service_completed_successfully
@@ -170,7 +163,7 @@ services:
     logging:
       driver: gelf
       options:
-        gelf-address: "udp://127.0.0.1:12201"
+        gelf-address: "${RANKMYAPP_GELF_ADDR:-udp://127.0.0.1:12201}"
         tag: "rankmyapp-api"
         labels: "service,com.docker.compose.service"
 
@@ -180,16 +173,10 @@ services:
       dockerfile: deployments/Dockerfile.prod
       target: worker
     container_name: rankmyapp-worker
+    env_file:
+      - ../.env.production
     environment:
-      MONGO_URI: "mongodb://mongodb:27017/?replicaSet=rs0"
-      MONGO_DATABASE: "rankmyapp"
-      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
-      RABBITMQ_EXCHANGE: "orders.events"
-      LOG_FORMAT: json
-      ELASTIC_APM_SERVER_URL: "http://apm-server:8200"
-      ELASTIC_APM_SERVICE_NAME: "rankmyapp-worker"
-      ELASTIC_APM_ENVIRONMENT: "production"
-      ELASTIC_APM_VERIFY_SERVER_CERT: "false"
+      ELASTIC_APM_SERVICE_NAME: rankmyapp-worker
     depends_on:
       init-mongodb:
         condition: service_completed_successfully
@@ -202,7 +189,7 @@ services:
     logging:
       driver: gelf
       options:
-        gelf-address: "udp://127.0.0.1:12201"
+        gelf-address: "${RANKMYAPP_GELF_ADDR:-udp://127.0.0.1:12201}"
         tag: "rankmyapp-worker"
         labels: "service,com.docker.compose.service"
 

@@ -1,0 +1,76 @@
+services:
+  mongodb:
+    image: mongo:7
+    container_name: rankmyapp-test-mongodb
+    command: ["mongod", "--replSet", "rs0"]
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongodb_test_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  init-mongodb:
+    image: mongo:7
+    container_name: rankmyapp-test-init-mongodb
+    command: >
+      sh -c "
+        until mongosh mongodb://mongodb:27017 --eval 'db.adminCommand(\"ping\")'; do echo 'Waiting for MongoDB...'; sleep 2; done;
+        mongosh mongodb://mongodb:27017 --eval 'rs.initiate()' || true;
+        echo 'Replica set started.';
+      "
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: rankmyapp-test-rabbitmq
+    ports:
+      - "5673:5672"
+      - "15673:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile.prod
+      target: api
+    container_name: rankmyapp-test-api
+    env_file:
+      - ../.env.test
+    environment:
+      ELASTIC_APM_SERVICE_NAME: rankmyapp-api
+    ports:
+      - "8081:8080"
+    depends_on:
+      init-mongodb:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile.prod
+      target: worker
+    container_name: rankmyapp-test-worker
+    env_file:
+      - ../.env.test
+    environment:
+      ELASTIC_APM_SERVICE_NAME: rankmyapp-worker
+    depends_on:
+      init-mongodb:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+
+volumes:
+  mongodb_test_data:
