@@ -1,5 +1,4 @@
-COMPOSE_ENV_FILE := $(wildcard .env)
-COMPOSE_ENV_FLAG := $(if $(COMPOSE_ENV_FILE),--env-file .env,)
+COMPOSE_ENV_FLAG := $(if $(wildcard .env),--env-file .env,)
 COMPOSE_PROD  := docker compose $(COMPOSE_ENV_FLAG) -f deployments/docker-compose.prod.yml
 COMPOSE_DEV   := docker compose $(COMPOSE_ENV_FLAG) -f deployments/docker-compose.dev.yml
 COMPOSE_TEST  := docker compose $(COMPOSE_ENV_FLAG) -f deployments/docker-compose.test.yml
@@ -8,8 +7,7 @@ COMPOSE_TEST  := docker compose $(COMPOSE_ENV_FLAG) -f deployments/docker-compos
 	run-api run-worker dev dev-api dev-worker swag tidy clean \
 	docker-build docker-up docker-down docker-reup \
 	docker-dev-up docker-dev-down docker-dev-check-elk docker-dev-logs-api docker-dev-logs-worker \
-	docker-test-up docker-test-down \
-	test-elk
+	docker-test-up docker-test-down
 
 default: help
 
@@ -17,43 +15,41 @@ help:
 	@echo "Usage: make [target]  (from repo root)"
 	@echo ""
 	@echo "  Local development (no full Compose stack)"
-	@echo "  help             Show this help (default when running make with no target)"
-	@echo "  build            Build api and worker binaries into ./bin/"
-	@echo "  run-api          Run API: go run ./cmd/api"
-	@echo "  run-worker       Run worker: go run ./cmd/worker"
-	@echo "  dev              API + worker with Air (hot reload)"
-	@echo "  dev-api          API only with Air"
-	@echo "  dev-worker       Worker only with Air"
-	@echo "  swag             Regenerate Swagger under docs/"
-	@echo "  tidy             go mod tidy"
-	@echo "  clean            Remove bin/ and coverage.out / coverage.html"
+	@echo "  help                    Show this help (default when running make with no target)"
+	@echo "  build                   Build api and worker binaries into ./bin/"
+	@echo "  run-api                 Run API: go run ./cmd/api"
+	@echo "  run-worker              Run worker: go run ./cmd/worker"
+	@echo "  dev                     API + worker with Air (hot reload)"
+	@echo "  dev-api                 API only with Air"
+	@echo "  dev-worker              Worker only with Air"
+	@echo "  swag                    Regenerate Swagger under docs/"
+	@echo "  tidy                    go mod tidy"
+	@echo "  clean                   Remove bin/ and coverage.out / coverage.html"
 	@echo ""
 	@echo "  Quality"
-	@echo "  lint             golangci-lint"
-	@echo "  test             test-unit + test-integration"
-	@echo "  test-unit        Unit tests under ./internal/..."
-	@echo "  test-unit-cover  Unit tests with coverage -> coverage.out"
-	@echo "  coverage         Print total coverage % from coverage.out"
-	@echo "  test-integration  Integration tests (Docker / testcontainers)"
+	@echo "  lint                    golangci-lint"
+	@echo "  test                    test-unit + test-integration"
+	@echo "  test-unit               Unit tests under ./internal/..."
+	@echo "  test-unit-cover         Unit tests with coverage -> coverage.out"
+	@echo "  coverage                Print total coverage % from coverage.out"
+	@echo "  test-integration        Integration tests (Docker / testcontainers)"
 	@echo ""
 	@echo "  Docker - production ($(COMPOSE_PROD))"
-	@echo "  docker-build     Build api and worker images (no cache)"
-	@echo "  docker-up        Start stack in background (-d): app, MongoDB, RabbitMQ, ELK, APM, Metricbeat"
-	@echo "  docker-down      Stop and remove production Compose stack"
-	@echo "  docker-reup      docker-build then docker-up"
+	@echo "  docker-build            Build api and worker images (no cache)"
+	@echo "  docker-up               Start stack in background (-d): app, MongoDB, RabbitMQ, ELK, APM, Metricbeat"
+	@echo "  docker-down             Stop and remove production Compose stack"
+	@echo "  docker-reup             docker-build then docker-up"
 	@echo ""
 	@echo "  Docker - development ($(COMPOSE_DEV))"
-	@echo "  docker-dev-up    Start dev stack with --build (ELK, APM, Metricbeat; app logs -> Kibana via GELF)"
-	@echo "  docker-dev-down  Stop development Compose stack"
-	@echo "  docker-dev-check-elk      List rankmyapp* indices in ES; hints if data view fails"
-	@echo "  docker-dev-logs-api       Follow api container logs (compose logs -f api)"
-	@echo "  docker-dev-logs-worker  Follow worker container logs"
+	@echo "  docker-dev-up           Start dev stack with --build (ELK, APM, Metricbeat; app logs -> Kibana via GELF)"
+	@echo "  docker-dev-down         Stop development Compose stack"
+	@echo "  docker-dev-check-elk    List rankmyapp* indices in ES; hints if data view fails"
+	@echo "  docker-dev-logs-api     Follow api container logs (compose logs -f api)"
+	@echo "  docker-dev-logs-worker Follow worker container logs"
 	@echo ""
 	@echo "  Docker - test stack ($(COMPOSE_TEST), no ELK; env: .env.test at repo root)"
-	@echo "  docker-test-up    Mongo + RabbitMQ + api (:8081) + worker"
-	@echo "  docker-test-down  Stop the test stack"
-	@echo ""
-	@echo "  Observability"
+	@echo "  docker-test-up          Mongo + RabbitMQ + api (:8081) + worker"
+	@echo "  docker-test-down        Stop the test stack"
 
 build:
 	@mkdir -p bin

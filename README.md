@@ -146,11 +146,7 @@ RANKMYAPP_GELF_ADDR=udp://host.docker.internal:12201
 
 ### Smoke test de logs no ES
 
-```bash
-make test-elk
-```
-
-(requer API a receber tráfego e pipeline de logs a funcionar.)
+Com a stack **dev** a correr e tráfego na API (ex.: `curl http://localhost:8080/health`), confirma índices com `make docker-dev-check-elk` ou no Kibana (data view `rankmyapp-logs-*`).
 
 ---
 
@@ -174,7 +170,6 @@ Executa `make` na **raiz do projeto**. Compose: `-f deployments/docker-compose.{
 | `make docker-test-up` / `make docker-test-down` | **Test** (Mongo + RabbitMQ + app prod; `.env.test` na raiz; API `:8081`) |
 | `make docker-dev-check-elk` | Lista índices `rankmyapp*` no Elasticsearch |
 | `make docker-dev-logs-api` / `make docker-dev-logs-worker` | `compose logs -f` (com GELF, a app pode não aparecer aqui) |
-| `make test-elk` | Smoke test de ingestão de logs |
 
 ---
 
@@ -200,7 +195,6 @@ Executa `make` na **raiz do projeto**. Compose: `-f deployments/docker-compose.{
 ├── configs/
 ├── deployments/             # compose prod/dev/test, Dockerfiles, elk/
 ├── docs/                    # Swagger (`make swag`)
-├── scripts/                 # test-elk.sh
 ├── internal/
 │   ├── app/                 # Commands, queries, DTOs, use cases
 │   ├── domain/
