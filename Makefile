@@ -137,9 +137,6 @@ docker-dev-check-elk:
 	@echo "  $(COMPOSE_DEV) logs logstash --tail 80"
 	@echo "Docker Desktop (Windows/macOS): if indices stay empty, set RANKMYAPP_GELF_ADDR=udp://host.docker.internal:12201 in the root .env file."
 
-test-elk:
-	@./scripts/test-elk.sh
-
 docker-dev-logs-api:
 	$(COMPOSE_DEV) logs -f api
 
