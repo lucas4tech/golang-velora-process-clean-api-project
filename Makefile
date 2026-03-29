@@ -54,7 +54,6 @@ help:
 	@echo "  docker-test-down  Stop the test stack"
 	@echo ""
 	@echo "  Observability"
-	@echo "  test-elk         Log pipeline smoke test (needs API up, e.g. docker-dev-up in another terminal)"
 
 build:
 	@mkdir -p bin
